@@ -375,39 +375,100 @@ class MailService {
 
   // 1. Ambil domain aktif Mail.tm (dengan fallback caching untuk cegah error 500)
   async getActiveDomains() {
-    // Cache domain selama 60 detik jika sudah ada
-    if (cachedDomains.length > 0 && Date.now() - lastDomainsFetchTime < 60000) {
-      return cachedDomains;
-    }
+  const CACHE_TIME = 5 * 60 * 1000;
 
+  // Gunakan cache jika masih valid
+  if (
+    cachedDomains.length > 0 &&
+    Date.now() - lastDomainsFetchTime < CACHE_TIME
+  ) {
+    return cachedDomains;
+  }
+
+  const urls = [
+    `${this.baseUrl}/domains?page=1`,
+    `${this.baseUrl}/domains`
+  ];
+
+  let lastError = null;
+
+  for (const url of urls) {
     try {
-      const res = await this.fetchWithTimeout(`${this.baseUrl}/domains`);
+      const res = await this.fetchWithTimeout(url);
+
+      const text = await res.text();
+
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = {};
+      }
+
       if (!res.ok) {
-        if (cachedDomains.length > 0) return cachedDomains;
-        throw new Error(`Gagal mengambil domain dari Mail.tm (Status: ${res.status})`);
-      }
-      const data = await res.json();
-      const domains = (data['hydra:member'] || data.member || data || [])
-        .filter(d => d.isActive !== false)
-        .map(d => d.domain);
-
-      if (!domains.length) {
-        if (cachedDomains.length > 0) return cachedDomains;
-        throw new Error('Tidak ada domain aktif yang tersedia saat ini.');
+        lastError = new Error(
+          `Mail.tm /domains mengembalikan HTTP ${res.status}`
+        );
+        continue;
       }
 
-      cachedDomains = domains;
-      lastDomainsFetchTime = Date.now();
-      return domains;
-    } catch (err) {
-      console.error('[MailService] getActiveDomains error:', err.message);
-      if (cachedDomains.length > 0) {
+      const members =
+        Array.isArray(data?.['hydra:member'])
+          ? data['hydra:member']
+          : Array.isArray(data?.member)
+            ? data.member
+            : Array.isArray(data)
+              ? data
+              : [];
+
+      const domains = members
+        .filter(d => d && d.domain && d.isActive !== false)
+        .map(d => String(d.domain).trim().toLowerCase())
+        .filter(Boolean);
+
+      if (domains.length > 0) {
+        cachedDomains = [...new Set(domains)];
+        lastDomainsFetchTime = Date.now();
+
+        console.log(
+          '[MailService] Active domains:',
+          cachedDomains
+        );
+
         return cachedDomains;
       }
-      // Fallback domain default jika mail.tm mengalami rate limit / network delay
-      return ['emalupe.com', 'mailtm.me'];
+
+      lastError = new Error(
+        'Mail.tm tidak mengembalikan domain aktif.'
+      );
+
+    } catch (err) {
+      lastError = err;
+      console.error(
+        '[MailService] Domain request error:',
+        err.message
+      );
     }
   }
+
+  // Kalau sebelumnya pernah berhasil mendapatkan domain,
+  // gunakan cache lama.
+  if (cachedDomains.length > 0) {
+    console.warn(
+      '[MailService] Menggunakan cached domains:',
+      cachedDomains
+    );
+
+    return cachedDomains;
+  }
+
+  // JANGAN menggunakan domain palsu/fallback.
+  throw new Error(
+    `Mail.tm sedang tidak menyediakan daftar domain. ${
+      lastError?.message || ''
+    }`.trim()
+  );
+}
 
   generateRandomString(length = 10, alphanumericOnly = true) {
     const chars = alphanumericOnly
@@ -454,48 +515,108 @@ class MailService {
 
   // 4. Daftarkan akun & peroleh token
   async createAccountAndLogin(address, password) {
-    const lockKey = `create_${address}`;
-    if (!db.acquireLock(lockKey)) {
-      throw new Error('Permintaan pembuatan akun sedang diproses.');
-    }
+  const lockKey = `create_${address}`;
+
+  if (!db.acquireLock(lockKey)) {
+    throw new Error(
+      'Permintaan pembuatan akun sedang diproses.'
+    );
+  }
+
+  try {
+    console.log(
+      '[MailService] Creating account:',
+      address
+    );
+
+    const registerRes = await this.fetchWithTimeout(
+      `${this.baseUrl}/accounts`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          address,
+          password
+        })
+      }
+    );
+
+    const responseText = await registerRes.text();
+
+    let errJson = {};
 
     try {
-      const registerRes = await this.fetchWithTimeout(`${this.baseUrl}/accounts`, {
-        method: 'POST',
-        body: JSON.stringify({ address, password })
-      });
-
-      if (!registerRes.ok && registerRes.status !== 422) {
-        const errJson = await registerRes.json().catch(() => ({}));
-        throw new Error(errJson.message || `Gagal mendaftarkan email (${registerRes.status})`);
-      }
-
-      const accountData = await registerRes.json().catch(() => ({}));
-      const accountId = accountData.id || `acc_${Date.now()}`;
-
-      const token = await this.obtainToken(address, password);
-      const meInfo = await this.verifyTokenWithMe(token);
-
-      const mailboxRecord = db.saveMailbox({
-        id: accountId,
-        email: address,
-        providerAccountId: accountId,
-        providerPassword: password,
-        providerToken: token,
-        providerStatus: 'active'
-      });
-
-      return {
-        id: mailboxRecord.id,
-        email: mailboxRecord.email,
-        createdAt: mailboxRecord.createdAt,
-        quota: meInfo.quota || 0,
-        used: meInfo.used || 0
-      };
-    } finally {
-      db.releaseLock(lockKey);
+      errJson = responseText
+        ? JSON.parse(responseText)
+        : {};
+    } catch {
+      errJson = {};
     }
+
+    if (!registerRes.ok && registerRes.status !== 422) {
+      console.error(
+        '[MailService] Account creation failed:',
+        registerRes.status,
+        responseText
+      );
+
+      throw new Error(
+        errJson.message ||
+        errJson['hydra:description'] ||
+        `Gagal mendaftarkan email (${registerRes.status})`
+      );
+    }
+
+    if (registerRes.status === 422) {
+      console.error(
+        '[MailService] Mail.tm rejected address:',
+        responseText
+      );
+
+      throw new Error(
+        errJson.message ||
+        errJson['hydra:description'] ||
+        'Domain atau alamat email ditolak oleh Mail.tm.'
+      );
+    }
+
+    const accountData = errJson;
+
+    if (!accountData.id) {
+      throw new Error(
+        'Mail.tm tidak mengembalikan ID akun.'
+      );
+    }
+
+    const accountId = accountData.id;
+
+    const token = await this.obtainToken(
+      address,
+      password
+    );
+
+    const meInfo = await this.verifyTokenWithMe(token);
+
+    const mailboxRecord = db.saveMailbox({
+      id: accountId,
+      email: address,
+      providerAccountId: accountId,
+      providerPassword: password,
+      providerToken: token,
+      providerStatus: 'active'
+    });
+
+    return {
+      id: mailboxRecord.id,
+      email: mailboxRecord.email,
+      createdAt: mailboxRecord.createdAt,
+      quota: meInfo.quota || 0,
+      used: meInfo.used || 0
+    };
+
+  } finally {
+    db.releaseLock(lockKey);
   }
+}
 
   // 5. POST /token untuk autentikasi
   async obtainToken(address, password) {
