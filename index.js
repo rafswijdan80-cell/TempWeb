@@ -375,7 +375,8 @@ class MailService {
 
   // 1. Ambil domain aktif Mail.tm (dengan fallback caching untuk cegah error 500)
   async getActiveDomains() {
-  const CACHE_TIME = 5 * 60 * 1000;
+  const CACHE_TIME = 10 * 60 * 1000;
+  const MAX_RETRIES = 3;
 
   // Gunakan cache jika masih valid
   if (
@@ -392,81 +393,120 @@ class MailService {
 
   let lastError = null;
 
-  for (const url of urls) {
-    try {
-      const res = await this.fetchWithTimeout(url);
-
-      const text = await res.text();
-
-      let data = {};
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    for (const url of urls) {
       try {
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        data = {};
-      }
-
-      if (!res.ok) {
-        lastError = new Error(
-          `Mail.tm /domains mengembalikan HTTP ${res.status}`
-        );
-        continue;
-      }
-
-      const members =
-        Array.isArray(data?.['hydra:member'])
-          ? data['hydra:member']
-          : Array.isArray(data?.member)
-            ? data.member
-            : Array.isArray(data)
-              ? data
-              : [];
-
-      const domains = members
-        .filter(d => d && d.domain && d.isActive !== false)
-        .map(d => String(d.domain).trim().toLowerCase())
-        .filter(Boolean);
-
-      if (domains.length > 0) {
-        cachedDomains = [...new Set(domains)];
-        lastDomainsFetchTime = Date.now();
-
         console.log(
-          '[MailService] Active domains:',
-          cachedDomains
+          `[MailService] Mengambil domain Mail.tm (percobaan ${attempt}/${MAX_RETRIES}): ${url}`
         );
 
-        return cachedDomains;
-      }
+        const res = await this.fetchWithTimeout(url);
 
-      lastError = new Error(
-        'Mail.tm tidak mengembalikan domain aktif.'
+        const text = await res.text();
+
+        let data = {};
+
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          data = {};
+        }
+
+        if (!res.ok) {
+          lastError = new Error(
+            `Mail.tm mengembalikan HTTP ${res.status}`
+          );
+
+          console.warn(
+            `[MailService] Domain request gagal: HTTP ${res.status}`
+          );
+
+          continue;
+        }
+
+        const members =
+          Array.isArray(data?.['hydra:member'])
+            ? data['hydra:member']
+            : Array.isArray(data?.member)
+              ? data.member
+              : Array.isArray(data)
+                ? data
+                : [];
+
+        const domains = members
+          .filter(domain => {
+            return (
+              domain &&
+              typeof domain.domain === 'string' &&
+              domain.domain.trim() &&
+              domain.isActive !== false
+            );
+          })
+          .map(domain =>
+            domain.domain
+              .trim()
+              .toLowerCase()
+          )
+          .filter(Boolean);
+
+        const uniqueDomains = [
+          ...new Set(domains)
+        ];
+
+        if (uniqueDomains.length > 0) {
+          cachedDomains = uniqueDomains;
+          lastDomainsFetchTime = Date.now();
+
+          console.log(
+            '[MailService] ✅ Active domains:',
+            cachedDomains
+          );
+
+          return cachedDomains;
+        }
+
+        lastError = new Error(
+          'Mail.tm tidak mengembalikan domain aktif.'
+        );
+
+      } catch (err) {
+        lastError = err;
+
+        console.error(
+          `[MailService] Domain request error (attempt ${attempt}):`,
+          err.message
+        );
+      }
+    }
+
+    // Kalau belum berhasil, tunggu sebelum retry berikutnya
+    if (attempt < MAX_RETRIES) {
+      const delay = attempt * 1500;
+
+      console.log(
+        `[MailService] Menunggu ${delay}ms sebelum retry...`
       );
 
-    } catch (err) {
-      lastError = err;
-      console.error(
-        '[MailService] Domain request error:',
-        err.message
+      await new Promise(resolve =>
+        setTimeout(resolve, delay)
       );
     }
   }
 
-  // Kalau sebelumnya pernah berhasil mendapatkan domain,
-  // gunakan cache lama.
+  // Kalau cache lama masih tersedia, gunakan cache tersebut
   if (cachedDomains.length > 0) {
     console.warn(
-      '[MailService] Menggunakan cached domains:',
+      '[MailService] ⚠️ Mail.tm gagal, menggunakan cached domains:',
       cachedDomains
     );
 
     return cachedDomains;
   }
 
-  // JANGAN menggunakan domain palsu/fallback.
   throw new Error(
-    `Mail.tm sedang tidak menyediakan daftar domain. ${
-      lastError?.message || ''
-    }`.trim()
+    `Mail.tm sedang tidak dapat menyediakan domain. ${
+      lastError?.message || 'Silakan coba lagi beberapa saat.'
+    }`
   );
 }
 
