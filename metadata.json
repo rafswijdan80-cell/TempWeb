@@ -1,0 +1,8 @@
+{
+  "name": "Remix TempEmailNih",
+  "description": "Layanan Temporary Email modern bergaya Gmail bertenaga Mail.tm API dengan smart OTP detection, link extraction, dan dark mode.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

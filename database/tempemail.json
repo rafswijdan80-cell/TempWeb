@@ -1,0 +1,57 @@
+{
+  "mailboxes": {
+    "6a88c68ef21df3012803043c": {
+      "id": "6a88c68ef21df3012803043c",
+      "email": "nih_cococyb9@emalupe.com",
+      "providerAccountId": "6a88c68ef21df3012803043c",
+      "providerPassword": "Tmp_EE9tRErTw3ex!",
+      "providerToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpYXQiOjE3ODczNDg2MjIsInJvbGVzIjpbIlJPTEVfVVNFUiJdLCJhZGRyZXNzIjoibmloX2NvY29jeWI5QGVtYWx1cGUuY29tIiwiaWQiOiI2YTg4YzY4ZWYyMWRmMzAxMjgwMzA0M2MiLCJtZXJjdXJlIjp7InN1YnNjcmliZSI6WyIvYWNjb3VudHMvNmE4OGM2OGVmMjFkZjMwMTI4MDMwNDNjIl19fQ.QYEENh_yGZvjHWgUNj3vDO5dfFafcIKQEJSt77pLOsx8SuzYvsSy486sgtJO1FJlW_SiSW_FnAfhLxRFECD0-Q",
+      "providerStatus": "active",
+      "createdAt": "2026-08-21T21:43:42.956Z",
+      "updatedAt": "2026-08-21T21:43:42.956Z"
+    }
+  },
+  "messageStates": {
+    "6a88c68ef21df3012803043c:6a88c88f45b4e1427376d3b0": {
+      "mailboxId": "6a88c68ef21df3012803043c",
+      "messageId": "6a88c88f45b4e1427376d3b0",
+      "isRead": true,
+      "updatedAt": "2026-08-21T22:24:20.791Z"
+    }
+  },
+  "settings": {
+    "createdAt": "2026-08-21T21:43:37.749Z"
+  },
+  "donations": {
+    "ord5at3rh85": {
+      "id": "ord5at3rh85",
+      "invoice_id": "ord5at3rh85",
+      "display_name": "Budi Developer",
+      "message": "Semangat terus bro! Mantap.",
+      "amount": 10000,
+      "fee": 250,
+      "total": 10250,
+      "status": "paid",
+      "qris_image": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021226590014ID.LINKAJA.WWW0118936009140000000000520458125303360540102505802ID5912TEMPEMAILNIH6007JAKARTA62070703A016304",
+      "expired_at": "2026-08-21T22:40:19.794Z",
+      "created_at": "2026-08-21T22:25:19.794Z",
+      "paid_at": "2026-08-21T22:25:27.821Z",
+      "updated_at": "2026-08-21T22:25:27.821Z"
+    },
+    "ordl6rez8kz": {
+      "id": "ordl6rez8kz",
+      "invoice_id": "ordl6rez8kz",
+      "display_name": "Anonymous",
+      "message": "",
+      "amount": 5000,
+      "fee": 250,
+      "total": 5250,
+      "status": "cancelled",
+      "qris_image": "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=00020101021226590014ID.LINKAJA.WWW011893600914000000000052045812530336054052505802ID5912TEMPEMAILNIH6007JAKARTA62070703A016304",
+      "expired_at": "2026-08-21T22:40:40.430Z",
+      "created_at": "2026-08-21T22:25:40.430Z",
+      "paid_at": null,
+      "updated_at": "2026-08-21T22:25:44.374Z"
+    }
+  }
+}
